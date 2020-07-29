@@ -1,14 +1,77 @@
+Bonsai SDK
+==========
 
-# Contributing
+A python library for integrating data sources with Bonsai BRAIN.
 
-This project welcomes contributions and suggestions.  Most contributions require you to agree to a
-Contributor License Agreement (CLA) declaring that you have the right to, and actually do, grant us
-the rights to use your contribution. For details, visit https://cla.opensource.microsoft.com.
 
-When you submit a pull request, a CLA bot will automatically determine whether you need to provide
-a CLA and decorate the PR appropriately (e.g., status check, comment). Simply follow the instructions
-provided by the bot. You will only need to do this once across all repos using our CLA.
+Installation
+------------
+To install from source (assuming you are in this directory)
+    `$ pip install ./`
 
-This project has adopted the [Microsoft Open Source Code of Conduct](https://opensource.microsoft.com/codeofconduct/).
-For more information see the [Code of Conduct FAQ](https://opensource.microsoft.com/codeofconduct/faq/) or
-contact [opencode@microsoft.com](mailto:opencode@microsoft.com) with any additional questions or comments.
+To install the current release version (NOT PUBLICLY AVAILABLE YET. IT WILL NOT WORK):
+    `$ pip install bonsai-common`
+
+Usage
+-----
+Clients will subsclass "bonsai-common.SimulatorSession" and implement the required methods.
+
+Example:
+::
+
+    #!/usr/bin/env python3
+
+    import sys
+    from bonsai-common import SimulatorSession, SimulatorInterface, ServiceConfig
+
+    class SimModel(SimulatorSession):
+        def get_state(self) -> Dict[str, Any]:
+        """Called to retreive the current state of the simulator. """
+            pass
+
+        def get_interface(self) -> SimulatorInterface:
+        """Called to retreive the simulator interface during registration. """
+            pass
+        
+        def halted(self) -> bool
+        """
+        Should return weather the episode is halted, and
+        no further action will result in a state.
+        """
+            pass
+
+        def episode_start(self, config: Dict[str, Any]):
+        """ Called at the start of each episode """
+            pass
+        
+        def episode_step(self, action: Dict[str, Any]):
+        """ Called for each step of the episode """
+            pass
+
+Then, the simulator is configured and assigned a BRAIN and run.
+::
+
+    def example():
+        config = ServiceConfig(argv=sys.argv)
+        sim = SimModel(config)
+        while sim.run():
+            continue
+
+Example of how to run simulator.
+    `python mysim.py --accesskey <ACCESSKEY> --api-host <API-HOST> --workspace <WORKSPACE> --sim-context <SIM_CONTEXT>`
+
+    `python cartpole.py --api-host https://api.bons.ai --workspace <WORKSPACE_ID> --accesskey <KEY> --sim-context '{"deploymentMode": "Testing", "simulatorClientId": "123456", "purpose": { "action": "Train", "target": { "workspaceName": "11111111", "brainName": "testsdk3", "brainVersion": 4, "conceptName": "balance"} } }'`
+
+Running tests using Dockerfile
+------------------------------
+To build dockerfile:
+    `docker build -t testbonsai3 -f Dockerfile ./`
+
+To run tests:
+    `docker run testbonsai3`
+
+
+Microsoft Open Source Code of Conduct
+==========
+
+This repository is subject to the [Microsoft Open Source Code of Conduct](https://opensource.microsoft.com/codeofconduct).
