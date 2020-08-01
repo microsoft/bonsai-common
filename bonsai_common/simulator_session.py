@@ -25,6 +25,9 @@ log = logging.getLogger(__name__)
 log.setLevel(level=logging.INFO)
 
 
+Schema = Dict[str, Any]
+
+
 class SimulatorSession(abc.ABC):
     _registered = None  # type: Optional[SimulatorSessionResponse]
     _sequence_id = 1  # type: int
@@ -37,7 +40,7 @@ class SimulatorSession(abc.ABC):
         self._sequence_id = 1
 
     # interface and state
-    def get_state(self) -> Dict[str, Any]:
+    def get_state(self) -> Schema:
         """Called to retreive the current state of the simulator. """
         raise NotImplementedError("get_state not implemented.")
 
@@ -65,12 +68,12 @@ class SimulatorSession(abc.ABC):
         pass
 
     @abc.abstractmethod
-    def episode_start(self, config: Dict[str, Any]) -> None:
+    def episode_start(self, config: Schema) -> None:
         """Called at the start of each episode. """
         raise NotImplementedError("episode_start not implemented.")
 
     @abc.abstractmethod
-    def episode_step(self, action: Dict[str, Any]) -> None:
+    def episode_step(self, action: Schema) -> None:
         """Called for each step of the episode. """
         raise NotImplementedError("episode_step not implemented.")
 
