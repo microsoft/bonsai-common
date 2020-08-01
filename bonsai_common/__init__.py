@@ -1,7 +1,3 @@
-# Copyright (C) 2018 Bonsai, Inc.
-
-# pylint: disable=wildcard-import
-
 """
 Bonsai Simulator Library.
 
@@ -11,8 +7,10 @@ system. It is used to train a simulation against a BRAIN.
 Classes:
     SimulatorSession
 """
+__copyright__ = "Copyright 2020, Microsoft Corp."
 
+# pylint: disable=wildcard-import
 # pyright: reportUnusedImport=false
 
-from .simulator_session import *
+from .simulator_session import SimulatorSession, Schema
 from .version import __version__
