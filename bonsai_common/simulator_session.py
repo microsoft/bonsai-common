@@ -86,7 +86,7 @@ class SimulatorSession(abc.ABC):
     # def playback_step(self, action: dict, stateDescription: dict, action: dict):
     # def playback_finish(self):
 
-    def idle(self, callbackTime: int):
+    def idle(self, callbackTime: float):
         """Called when the simulator should idle and perform no action. """
         log.info("Idling...")
         pass
@@ -112,14 +112,8 @@ class SimulatorSession(abc.ABC):
         try:
             if self._registered is None:
                 log.info("Registering Sim")
-                interface = self.get_interface()
-                registration_info = SimulatorInterface(
-                    name=interface.name,
-                    timeout=interface.timeout,
-                    simulator_context=interface.simulator_context,
-                )
                 self._registered = self._client.session.create(
-                    self._config.workspace, registration_info
+                    self._config.workspace, self.get_interface()
                 )
                 self.registered()
                 return True
@@ -132,14 +126,14 @@ class SimulatorSession(abc.ABC):
                 state = jsons.loads(state)
 
                 sim_state = SimulatorState(
-                    sequence_id=self._sequence_id, state=state, halted=False,
+                    sequence_id=self._sequence_id, state=state, halted=self.halted(),
                 )
                 advance_response = self._client.session.advance(
                     self._config.workspace, session_id, body=sim_state
                 )  # # type: Event
 
                 self._sequence_id = advance_response.sequence_id
-                log.info("Recieved event: {}".format(advance_response.type))
+                log.info("Received event: {}".format(advance_response.type))
                 self._dispatch_event(advance_response)
                 return True
         except KeyboardInterrupt:
