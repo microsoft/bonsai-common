@@ -7,7 +7,13 @@ __copyright__ = "Copyright 2020, Microsoft Corp."
 
 import abc
 import logging
+import sys
+import signal
+
+from functools import partial
+from types import FrameType
 from typing import Dict, Any, Optional
+
 import jsons
 
 from microsoft_bonsai_api.simulator.client import BonsaiClient, BonsaiClientConfig
@@ -31,6 +37,7 @@ Schema = Dict[str, Any]
 class SimulatorSession(abc.ABC):
     _registered = None  # type: Optional[SimulatorSessionResponse]
     _sequence_id = 1  # type: int
+    _last_event = None  # type: Optional[Event]
 
     def __init__(self, config: BonsaiClientConfig):
         self._config = config
@@ -93,7 +100,7 @@ class SimulatorSession(abc.ABC):
 
     def unregistered(self, reason: str):
         """Called when the simulator has been unregistered and should exit. """
-        log.info("Unregistered.")
+        log.info("Unregistered, Reason: {}".format(reason))
         pass
 
     def run(self) -> bool:
@@ -108,13 +115,22 @@ class SimulatorSession(abc.ABC):
         returns True if the simulator should continue.
         returns False if the simulator should exit its simulation loop.
         """
+
+        # Boolean used to determine if we should attempt to unregister simulator
         unregister = False
+
         try:
             if self._registered is None:
                 log.info("Registering Sim")
                 self._registered = self._client.session.create(
                     self._config.workspace, self.get_interface()
                 )
+
+                # Attach SIGTERM handler to attempt to unregister sim when a SIGTERM is detected
+                if sys.platform == "linux" or sys.platform == "darwin":
+                    signal.signal(
+                        signal.SIGTERM, partial(_handleSIGTERM, sim_session=self)
+                    )
                 self.registered()
                 return True
             else:
@@ -128,14 +144,20 @@ class SimulatorSession(abc.ABC):
                 sim_state = SimulatorState(
                     sequence_id=self._sequence_id, state=state, halted=self.halted(),
                 )
-                advance_response = self._client.session.advance(
+                self._last_event = self._client.session.advance(
                     self._config.workspace, session_id, body=sim_state
                 )  # # type: Event
 
-                self._sequence_id = advance_response.sequence_id
-                log.info("Received event: {}".format(advance_response.type))
-                self._dispatch_event(advance_response)
-                return True
+                self._sequence_id = self._last_event.sequence_id
+                log.info("Received event: {}".format(self._last_event.type))
+
+                keep_going = self._dispatch_event(self._last_event)
+                if keep_going is False:
+                    log.debug(
+                        "Setting flag to indicate that sim should attempt to unregister."
+                    )
+                    unregister = True
+                return keep_going
         except KeyboardInterrupt:
             unregister = True
         except Exception as err:
@@ -143,15 +165,8 @@ class SimulatorSession(abc.ABC):
             log.error("Exiting due to the following error: {}".format(err))
             raise err
         finally:
-            if self._registered and unregister:
-                try:
-                    log.info("Attempting to unregister simulator.")
-                    self._client.session.delete(
-                        self._config.workspace, session_id=self._registered.session_id,
-                    )
-                    log.info("Successfully unregistered simulator.")
-                except Exception as err:
-                    log.error("Unregister simulator failed with error: {}".format(err))
+            if unregister:
+                self.unregister()
         return False
 
     def _dispatch_event(self, event: Event) -> bool:
@@ -180,7 +195,37 @@ class SimulatorSession(abc.ABC):
                 self.idle(0)
 
         elif event.type == EventType.unregister.value and event.unregister:
-            self.unregistered(event.unregister.reason)
+            log.info("Unregister reason: {}.".format(event.unregister.reason))
             return False
 
         return True
+
+    def unregister(self):
+        """ Attempts to unregister simulator session"""
+        if self._registered:
+            try:
+                log.info("Attempting to unregister simulator.")
+                self._client.session.delete(
+                    self._config.workspace, session_id=self._registered.session_id,
+                )
+
+                if (
+                    self._last_event is not None
+                    and self._last_event.type == EventType.unregister.value
+                    and self._last_event.unregister
+                ):
+                    self.unregistered(self._last_event.unregister.reason)
+
+                log.info("Successfully unregistered simulator.")
+            except Exception as err:
+                log.error("Unregister simulator failed with error: {}".format(err))
+
+
+def _handleSIGTERM(
+    signalType: int, frame: FrameType, sim_session: SimulatorSession
+) -> None:
+    """ Attempts to unregister sim when a SIGTERM signal is detected """
+    log.info("Handling SIGTERM.")
+    sim_session.unregister()
+    log.info("SIGTERM Handled, exiting.")
+    sys.exit()

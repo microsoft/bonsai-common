@@ -1,20 +1,18 @@
-Bonsai SDK
-==========
+# Bonsai Common
 
-A python library for integrating data sources with Bonsai BRAIN.
+A python library for integrating data sources with Bonsai brain.
 
+## Installation
 
-Installation
-------------
 To install from source (assuming you are in this directory)
-    `$ pip install ./`
+`$ pip install ./`
 
-To install the current release version (NOT PUBLICLY AVAILABLE YET. IT WILL NOT WORK):
-    `$ pip install bonsai-common`
+To install the current release from the git repo:
+`$ pip install git+https://github.com/microsoft/bonsai-common`
 
-Usage
------
-Clients will subsclass "bonsai-common.SimulatorSession" and implement the required methods.
+## Usage
+
+Clients will subclass "bonsai-common.SimulatorSession" and implement the required methods.
 
 Example:
 ::
@@ -34,7 +32,7 @@ Example:
         def get_interface(self) -> SimulatorInterface:
         """Called to retreive the simulator interface during registration. """
             pass
-        
+
         def halted(self) -> bool
         """
         Should return weather the episode is halted, and
@@ -45,7 +43,7 @@ Example:
         def episode_start(self, config: Schema):
         """ Called at the start of each episode """
             pass
-        
+
         def episode_step(self, action: Schema):
         """ Called for each step of the episode """
             pass
@@ -60,20 +58,18 @@ Then, the simulator is configured and assigned a BRAIN and run.
             continue
 
 Example of how to run simulator.
-    `python mysim.py --accesskey <ACCESSKEY> --workspace <WORKSPACE>`
+`python mysim.py --accesskey <ACCESSKEY> --workspace <WORKSPACE>`
 
     `python mysim.py --workspace <WORKSPACE_ID> --accesskey <KEY>`
 
-Running tests using Dockerfile
-------------------------------
+## Running tests using Dockerfile
+
 To build dockerfile:
-    `docker build -t testbonsai3 -f Dockerfile ./`
+`docker build -t testbonsai3 -f Dockerfile ./`
 
 To run tests:
-    `docker run testbonsai3`
+`docker run testbonsai3`
 
-
-Microsoft Open Source Code of Conduct
-==========
+# Microsoft Open Source Code of Conduct
 
 This repository is subject to the [Microsoft Open Source Code of Conduct](https://opensource.microsoft.com/codeofconduct).
