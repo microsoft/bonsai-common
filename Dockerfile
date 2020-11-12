@@ -18,7 +18,7 @@ WORKDIR bonsai-common/
 
 CMD ["pytest", \
     "--junit-xml", \
-    "test-results/junit-linux-bonsai3-py.xml", \
+    "test-results/junit-linux-bonsai-common.xml", \
     "--junit-prefix", \
     "src.sdk3.bonsai-common",\
     "--cov"]
