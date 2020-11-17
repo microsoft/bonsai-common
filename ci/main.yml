@@ -5,7 +5,7 @@ name: $(BuildDefinitionName)_$(SourceBranchName)_$(BuildID)
 stages:
   - stage: Build
     jobs:
-      - job: Bonsai-Common-Wheel
+      - job: BonsaiCommonWheel
         timeoutInMinutes: 60
         cancelTimeoutInMinutes: 5
         strategy:
