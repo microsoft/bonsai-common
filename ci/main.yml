@@ -22,7 +22,7 @@ stages:
             #   imageName: 'windows-2019'
             #   python.version: '3.6'
             #   WHEELS_PATH: '\dist\*.whl'
-        displayName: BonsaiCommon Wheels
+        displayName: Bonsai Common Wheels
         pool:
           vmImage: $(imageName)
         steps:
