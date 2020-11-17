@@ -5,7 +5,7 @@ name: $(BuildDefinitionName)_$(SourceBranchName)_$(BuildID)
 stages:
   - stage: Build
     jobs:
-      - job: BonsaiCommonWheel
+      - job: Bonsai-Common-Wheel
         timeoutInMinutes: 60
         cancelTimeoutInMinutes: 5
         strategy:
@@ -49,7 +49,7 @@ stages:
               VERSION_SUFIX="$(echo $BUILD_BUILDID | sed -E 's/[- ]/_/g')"
               echo "VERSION_SUFIX: $VERSION_SUFIX"
               VERSION_FILE="$BUILD_SOURCESDIRECTORY/setup.py"
-              if [[ "$BUILD_SOURCEBRANCH" == *"master"* ]] || [[ "$BUILD_SOURCEBRANCH" == *"releases/"* ]]; then
+              if [[ "$BUILD_SOURCEBRANCH" == *"main"* ]] || [[ "$BUILD_SOURCEBRANCH" == *"releases/"* ]]; then
                 VERSION_SUFIX=".${VERSION_SUFIX}"
                 echo "Release generation detected. The VERSION_SUFIX will be directly appended."
               else
@@ -87,10 +87,10 @@ stages:
 trigger:
   branches:
     include:
-      - master
+      - main
       - releases/*
 pr:
   branches:
     include:
-      - master
+      - main
       - releases/*
