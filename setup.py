@@ -5,12 +5,9 @@ logging.basicConfig(level=logging.DEBUG)
 log = logging.getLogger(__name__)
 log.debug("Running setup...")
 
-version = {}
-with open("./bonsai_common/version.py") as fp:
-    exec(fp.read(), version)
 setup(
     name="bonsai-common",
-    version=version["__version__"],
+    version="1.0.1",
     description="Simulator interface library for Bonsai AI platform v3",
     long_description=open("README.md").read(),
     url="https://bons.ai",
