@@ -1,5 +1,5 @@
 # Bonsai Common
-
+![Python Tests](https://github.com/microsoft/bonsai-common/workflows/Python%20Tests/badge.svg?branch=main)
 A python library for integrating data sources with Bonsai brain.
 
 ## Installation
