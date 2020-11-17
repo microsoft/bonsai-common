@@ -8,11 +8,13 @@ __copyright__ = "Copyright 2020, Microsoft Corp."
 import abc
 import logging
 import sys
+import numpy as np
 import signal
+import time
 
 from functools import partial
 from types import FrameType
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 
 import jsons
 
@@ -34,17 +36,72 @@ log.setLevel(level=logging.INFO)
 Schema = Dict[str, Any]
 
 
+def default_numpy_bool_serializer(np_bool: np.bool_, **kwargs: Dict[str, Any]) -> bool:
+    """
+    Serialize the given numpy bool instance to a native python object.
+    :param np_obj: the numpy object instance that is to be serialized.
+    :param kwargs: not used.
+    :return: native python object equivalent to the numpy object representation.
+    """
+    return np_bool.item()
+
+
+jsons.set_serializer(default_numpy_bool_serializer, np.bool_)
+
+
+def default_numpy_number_serializer(
+    np_number: np.number, **kwargs: Dict[str, Any]
+) -> object:
+    """
+    Serialize the given numpy number instance to a native python object.
+    :param np_obj: the numpy object instance that is to be serialized.
+    :param kwargs: not used.
+    :return: native python object equivalent to the numpy object representation.
+    """
+    return np_number.item()
+
+
+jsons.set_serializer(default_numpy_number_serializer, np.number)
+
+
+def default_numpy_array_serializer(
+    np_array: np.ndarray, **kwargs: Dict[str, Any]
+) -> List[Any]:
+    """
+    Serialize the given numpy object instance to a string. It uses
+    str because all numpy object str representation are compatible
+    with the Python built-in equivalent.
+    :param np_obj: the numpy object instance that is to be serialized.
+    :param kwargs: not used.
+    :return: str with the numpy object representation.
+    """
+    native_list = np_array.tolist()
+    return jsons.default_iterable_serializer(native_list, **kwargs)
+
+
+jsons.set_serializer(default_numpy_array_serializer, np.ndarray)
+
+
 class SimulatorSession(abc.ABC):
     _registered = None  # type: Optional[SimulatorSessionResponse]
     _sequence_id = 1  # type: int
     _last_event = None  # type: Optional[Event]
 
-    def __init__(self, config: BonsaiClientConfig):
+    def __init__(self, config: BonsaiClientConfig, *, log_dispatch: bool = True):
         self._config = config
 
         self._registered = None
         self._client = BonsaiClient(config)
         self._sequence_id = 1
+        self._log_dispatch = log_dispatch
+
+    @property
+    def attach_to_sigterm(self):
+        """Indicates if the session should handle the sigterm.
+        By default we are handling the sigterm but a subclass
+        could override this property to change the behavior.
+        """
+        return True
 
     # interface and state
     def get_state(self) -> Schema:
@@ -88,15 +145,11 @@ class SimulatorSession(abc.ABC):
         """Called at the end of an episode. """
         pass
 
-    # TODO
-    # def playback_start(self, config: dict):
-    # def playback_step(self, action: dict, stateDescription: dict, action: dict):
-    # def playback_finish(self):
-
-    def idle(self, callbackTime: float):
+    def idle(self, callback_time: float):
         """Called when the simulator should idle and perform no action. """
-        log.info("Idling...")
-        pass
+        log.info("Idling for {} seconds...".format(callback_time))
+        if callback_time > 0:
+            time.sleep(callback_time)
 
     def unregistered(self, reason: str):
         """Called when the simulator has been unregistered and should exit. """
@@ -127,7 +180,9 @@ class SimulatorSession(abc.ABC):
                 )
 
                 # Attach SIGTERM handler to attempt to unregister sim when a SIGTERM is detected
-                if sys.platform == "linux" or sys.platform == "darwin":
+                if self.attach_to_sigterm and (
+                    sys.platform == "linux" or sys.platform == "darwin"
+                ):
                     signal.signal(
                         signal.SIGTERM, partial(_handleSIGTERM, sim_session=self)
                     )
@@ -136,20 +191,27 @@ class SimulatorSession(abc.ABC):
             else:
                 session_id = self._registered.session_id
 
-                # TODO: Figure out what to do here. Moab sim has a complex type in it's state (numpy.float)
-                #       Workaround is the following two lines because the swagger libraries do not like it.
-                state = jsons.dumps(self.get_state())
+                # TODO: Figure out what to do here. Moab sim has a complex type in it's
+                #       state (numpy.float)
+                #       Workaround is the following two lines and the custom jsons
+                #       serializer added at the begging of the module. The swagger
+                #       libraries do not like it.
+                original_state = self.get_state()
+                state = jsons.dumps(original_state)
                 state = jsons.loads(state)
 
                 sim_state = SimulatorState(
-                    sequence_id=self._sequence_id, state=state, halted=self.halted(),
+                    sequence_id=self._sequence_id,
+                    state=state,
+                    halted=self.halted(),
                 )
                 self._last_event = self._client.session.advance(
                     self._config.workspace, session_id, body=sim_state
                 )  # # type: Event
 
                 self._sequence_id = self._last_event.sequence_id
-                log.info("Received event: {}".format(self._last_event.type))
+                if self._log_dispatch:
+                    log.info("Received event: {}".format(self._last_event.type))
 
                 keep_going = self._dispatch_event(self._last_event)
                 if keep_going is False:
@@ -162,7 +224,7 @@ class SimulatorSession(abc.ABC):
             unregister = True
         except Exception as err:
             unregister = True
-            log.error("Exiting due to the following error: {}".format(err))
+            log.exception("Exiting due to the following error: {}".format(err))
             raise err
         finally:
             if unregister:
@@ -171,10 +233,10 @@ class SimulatorSession(abc.ABC):
 
     def _dispatch_event(self, event: Event) -> bool:
         """
-            Examines the SimulatorEvent and calls one of the
-            dispatch functions for the appropriate event.
+        Examines the SimulatorEvent and calls one of the
+        dispatch functions for the appropriate event.
 
-            return false if there are no more events.
+        return false if there are no more events.
         """
 
         if event.type == EventType.episode_start.value and event.episode_start:
@@ -206,7 +268,8 @@ class SimulatorSession(abc.ABC):
             try:
                 log.info("Attempting to unregister simulator.")
                 self._client.session.delete(
-                    self._config.workspace, session_id=self._registered.session_id,
+                    self._config.workspace,
+                    session_id=self._registered.session_id,
                 )
 
                 if (

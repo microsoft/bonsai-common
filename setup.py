@@ -7,7 +7,7 @@ log.debug("Running setup...")
 
 setup(
     name="bonsai-common",
-    version="1.0.1",
+    version="1.0.2",
     description="Simulator interface library for Bonsai AI platform v3",
     long_description=open("README.md").read(),
     url="https://bons.ai",
@@ -28,6 +28,7 @@ setup(
         "wheel>=0.31.0",
         "requests>=2.18",
         "jsons==1.0.0",
+        "numpy==1.19.4",
         "microsoft-bonsai-api==0.1.2",
     ],
     python_requires=">=3.5",

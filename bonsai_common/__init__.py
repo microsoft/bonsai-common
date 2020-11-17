@@ -13,4 +13,3 @@ __copyright__ = "Copyright 2020, Microsoft Corp."
 # pyright: reportUnusedImport=false
 
 from .simulator_session import SimulatorSession, Schema
-from .version import __version__
