@@ -85,7 +85,7 @@ stages:
               cat $BUILD_SOURCESDIRECTORY/setup.py | grep "version"
               echo $PYPIRC_PATH
               cat $PYPIRC_PATH
-          displayName: "Change version"
+            displayName: "Change version"
           - bash: |
               python setup.py bdist_wheel
             displayName: "Generate Wheels"
