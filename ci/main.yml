@@ -49,43 +49,35 @@ stages:
             displayName: "Twine Authenticate"
             inputs:
               artifactFeed: socrates-feed
-          - bash: |
-              # Cause the script to exit if a single command fails.
-              set -e
-              # Show explicitly which commands are currently running.
-              set -x
+          - ${{ if eq(parameters.release, false) }}:
+            - bash: |
+                # Cause the script to exit if a single command fails.
+                set -e
+                # Show explicitly which commands are currently running.
+                set -x
 
-              echo ${{ parameters.release }}
-              if ${{ parameters.release }}; then
-                echo "Pipeline set to release, skipping version change"
+                echo "BUILD_BUILDID: $BUILD_BUILDID"
+                VERSION_SUFIX="$(echo $BUILD_BUILDID | sed -E 's/[- ]/_/g')"
+                echo "VERSION_SUFIX: $VERSION_SUFIX"
+                VERSION_FILE="$BUILD_SOURCESDIRECTORY/setup.py"
+                if [[ "$BUILD_SOURCEBRANCH" == *"main"* ]] || [[ "$BUILD_SOURCEBRANCH" == *"releases/"* ]]; then
+                  VERSION_SUFIX=".${VERSION_SUFIX}"
+                  echo "Release generation detected. The VERSION_SUFIX will be directly appended."
+                else
+                  VERSION_SUFIX=".dev${VERSION_SUFIX}"
+                  echo "Dev Release generation detected. The VERSION_SUFIX will be prefixed with the dev tag."
+                fi
+                if [[ $AGENT_OS == "Darwin" ]]; then
+                  sed -i -e -E "s+version=(['\"])([0-9]{1}\.[0-9]{1}\.[0-9]{1})(\.dev)?[^'\"]*(['\"])+version=\1\2$VERSION_SUFIX\4+1" $VERSION_FILE
+                else
+                  sed -ier "s+version=\(['\"]\)\([0-9]\{1\}\.[0-9]\{1\}\.[0-9]\{1\}\)\(\.dev\)\?[^'\"]*\(['\"]\)+version=\1\2$VERSION_SUFIX\4+1" $VERSION_FILE
+                fi
+                cat $VERSION_FILE | grep "version="
                 echo "Version used:"
                 cat $BUILD_SOURCESDIRECTORY/setup.py | grep "version"
-                exit 0
-              else
-                echo "FALSE"
-              fi
-              echo "BUILD_BUILDID: $BUILD_BUILDID"
-              VERSION_SUFIX="$(echo $BUILD_BUILDID | sed -E 's/[- ]/_/g')"
-              echo "VERSION_SUFIX: $VERSION_SUFIX"
-              VERSION_FILE="$BUILD_SOURCESDIRECTORY/setup.py"
-              if [[ "$BUILD_SOURCEBRANCH" == *"main"* ]] || [[ "$BUILD_SOURCEBRANCH" == *"releases/"* ]]; then
-                VERSION_SUFIX=".${VERSION_SUFIX}"
-                echo "Release generation detected. The VERSION_SUFIX will be directly appended."
-              else
-                VERSION_SUFIX=".dev${VERSION_SUFIX}"
-                echo "Dev Release generation detected. The VERSION_SUFIX will be prefixed with the dev tag."
-              fi
-              if [[ $AGENT_OS == "Darwin" ]]; then
-                sed -i -e -E "s+version=(['\"])([0-9]{1}\.[0-9]{1}\.[0-9]{1})(\.dev)?[^'\"]*(['\"])+version=\1\2$VERSION_SUFIX\4+1" $VERSION_FILE
-              else
-                sed -ier "s+version=\(['\"]\)\([0-9]\{1\}\.[0-9]\{1\}\.[0-9]\{1\}\)\(\.dev\)\?[^'\"]*\(['\"]\)+version=\1\2$VERSION_SUFIX\4+1" $VERSION_FILE
-              fi
-              cat $VERSION_FILE | grep "version="
-              echo "Version used:"
-              cat $BUILD_SOURCESDIRECTORY/setup.py | grep "version"
-              echo $PYPIRC_PATH
-              cat $PYPIRC_PATH
-            displayName: "Change version"
+                echo $PYPIRC_PATH
+                cat $PYPIRC_PATH
+              displayName: "Change version"
           - bash: |
               python setup.py bdist_wheel
             displayName: "Generate Wheels"
