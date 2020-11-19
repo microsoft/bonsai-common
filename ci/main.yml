@@ -1,5 +1,14 @@
 # Minimal Build pipeline
 # This allow us to generate wheels and upload that to a feed.
+# This pipeline will run on all pr/s and every time a change is landed into master.
+# If you wish to release a wheel without the buildId appended -> manually run the pipeline 
+# with the release parameter set to True
+
+parameters:
+  - name: release
+    displayName: release
+    type: boolean
+    default: false
 
 name: $(BuildDefinitionName)_$(SourceBranchName)_$(BuildID)
 stages:
@@ -45,6 +54,8 @@ stages:
               set -e
               # Show explicitly which commands are currently running.
               set -x
+
+              echo ${{ parameters.release }}
               echo "BUILD_BUILDID: $BUILD_BUILDID"
               VERSION_SUFIX="$(echo $BUILD_BUILDID | sed -E 's/[- ]/_/g')"
               echo "VERSION_SUFIX: $VERSION_SUFIX"
