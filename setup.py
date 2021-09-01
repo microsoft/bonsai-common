@@ -29,7 +29,7 @@ setup(
         "requests>=2.18",
         "jsons==1.0.0",
         "numpy==1.19.4",
-        "microsoft-bonsai-api==0.1.2",
+        "microsoft-bonsai-api>=0.1.3",
     ],
     python_requires=">=3.5",
     packages=find_packages(),
