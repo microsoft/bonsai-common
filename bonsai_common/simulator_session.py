@@ -8,13 +8,12 @@ __copyright__ = "Copyright 2020, Microsoft Corp."
 import abc
 import logging
 import sys
-import numpy as np
 import signal
 import time
 
 from functools import partial
 from types import FrameType
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, cast
 
 import jsons
 
@@ -27,6 +26,12 @@ from microsoft_bonsai_api.simulator.generated.models import (
     SimulatorState,
 )
 
+from azure.core.exceptions import (
+    ServiceRequestError,
+    ServiceResponseError,
+    ServiceResponseTimeoutError,
+)
+
 logFormatter = "[%(asctime)s][%(levelname)s] %(message)s"
 logging.basicConfig(format=logFormatter, datefmt="%Y-%m-%d %H:%M:%S")
 log = logging.getLogger(__name__)
@@ -35,51 +40,57 @@ log.setLevel(level=logging.INFO)
 
 Schema = Dict[str, Any]
 
+# Numpy is heavy dependency that we would like to avoid in cases whenever
+# is possible. Here we are making numpy a soft-dependency that will be used
+# only if it's available
+if "numpy" in sys.modules:
+    try:
+        import numpy as np
 
-def default_numpy_bool_serializer(np_bool: np.bool_, **kwargs: Dict[str, Any]) -> bool:
-    """
-    Serialize the given numpy bool instance to a native python object.
-    :param np_obj: the numpy object instance that is to be serialized.
-    :param kwargs: not used.
-    :return: native python object equivalent to the numpy object representation.
-    """
-    return np_bool.item()
+        def default_numpy_bool_serializer(
+            np_bool: np.bool_, **kwargs: Dict[str, Any]
+        ) -> bool:
+            """
+            Serialize the given numpy bool instance to a native python object.
+            :param np_obj: the numpy object instance that is to be serialized.
+            :param kwargs: not used.
+            :return: native python object equivalent to the numpy object representation.
+            """
+            return np_bool.item()
 
+        jsons.set_serializer(default_numpy_bool_serializer, np.bool_)
 
-jsons.set_serializer(default_numpy_bool_serializer, np.bool_)
+        def default_numpy_number_serializer(
+            np_number: np.number, **kwargs: Dict[str, Any]
+        ) -> object:
+            """
+            Serialize the given numpy number instance to a native python object.
+            :param np_obj: the numpy object instance that is to be serialized.
+            :param kwargs: not used.
+            :return: native python object equivalent to the numpy object representation.
+            """
+            return np_number.item()
 
+        jsons.set_serializer(default_numpy_number_serializer, np.number)
 
-def default_numpy_number_serializer(
-    np_number: np.number, **kwargs: Dict[str, Any]
-) -> object:
-    """
-    Serialize the given numpy number instance to a native python object.
-    :param np_obj: the numpy object instance that is to be serialized.
-    :param kwargs: not used.
-    :return: native python object equivalent to the numpy object representation.
-    """
-    return np_number.item()
+        def default_numpy_array_serializer(
+            np_array: np.ndarray, **kwargs: Dict[str, Any]
+        ) -> List[Any]:
+            """
+            Serialize the given numpy object instance to a string. It uses
+            str because all numpy object str representation are compatible
+            with the Python built-in equivalent.
+            :param np_obj: the numpy object instance that is to be serialized.
+            :param kwargs: not used.
+            :return: str with the numpy object representation.
+            """
+            native_list = np_array.tolist()
+            return jsons.default_iterable_serializer(native_list, **kwargs)
 
+        jsons.set_serializer(default_numpy_array_serializer, np.ndarray)
 
-jsons.set_serializer(default_numpy_number_serializer, np.number)
-
-
-def default_numpy_array_serializer(
-    np_array: np.ndarray, **kwargs: Dict[str, Any]
-) -> List[Any]:
-    """
-    Serialize the given numpy object instance to a string. It uses
-    str because all numpy object str representation are compatible
-    with the Python built-in equivalent.
-    :param np_obj: the numpy object instance that is to be serialized.
-    :param kwargs: not used.
-    :return: str with the numpy object representation.
-    """
-    native_list = np_array.tolist()
-    return jsons.default_iterable_serializer(native_list, **kwargs)
-
-
-jsons.set_serializer(default_numpy_array_serializer, np.ndarray)
+    except Exception:
+        log.info("Erro trying to import Numpy")
 
 
 class SimulatorSession(abc.ABC):
@@ -94,6 +105,23 @@ class SimulatorSession(abc.ABC):
         self._client = BonsaiClient(config)
         self._sequence_id = 1
         self._log_dispatch = log_dispatch
+        self._first_run_made = False
+        self._includes_complex_state = False
+        self._transient_error_retry_count = 5
+        self._current_retry_count = 0
+
+    @property
+    def force_complex_state(self):
+        """
+        Indicates that the state has to be handle as complex state regardless
+        of be one or not. A complex state is any state that contains fields
+        of types that are not built in the Python interpreter. For example,
+        if the simulator is using Numpy types in any of the fields, then the
+        Simulator session will auto-detected and automatically mark the state
+        as complex. This property is useful to handle special cases where
+        the Simulator Session is not able to auto-detect a complex type.
+        """
+        return False
 
     @property
     def attach_to_sigterm(self):
@@ -187,18 +215,47 @@ class SimulatorSession(abc.ABC):
                         signal.SIGTERM, partial(_handleSIGTERM, sim_session=self)
                     )
                 self.registered()
+                self._sequence_id = 1
+                log.info(
+                    "Registered Sim, SessionId: {}".format(self._registered.session_id)
+                )
+
                 return True
             else:
                 session_id = self._registered.session_id
 
-                # TODO: Figure out what to do here. Moab sim has a complex type in it's
-                #       state (numpy.float)
-                #       Workaround is the following two lines and the custom jsons
-                #       serializer added at the begging of the module. The swagger
-                #       libraries do not like it.
-                original_state = self.get_state()
-                state = jsons.dumps(original_state)
-                state = jsons.loads(state)
+                state = self.get_state()
+                if not self._first_run_made:
+                    self._first_run_made = True
+
+                    def check_for_complex_state(state_fields: Dict[str, Any]):
+                        for v in state_fields.values():
+                            # We need to have these two conditions because
+                            # numpy types, which we consider here complex types,
+                            # are subclass of builtin types. For example, the following
+                            # statement is True: isinstance(np.float64(3.0), float)
+                            if (
+                                not isinstance(v, (int, float, bool, str, dict))
+                                or type(cast(Any, v)).__module__ != float.__module__
+                            ):
+                                self._includes_complex_state = True
+                                break
+                            elif isinstance(v, dict):
+                                check_for_complex_state(cast(Dict[str, Any], v))
+
+                        if self._includes_complex_state:
+                            log.info("Complex type detected for sim state")
+                        else:
+                            log.info("No complex type detected for sim state")
+                            if self.force_complex_state:
+                                self._includes_complex_state = True
+                                log.info("Complex type for sim state has been forced")
+
+                    check_for_complex_state(state)
+
+                if self._includes_complex_state:
+                    state = jsons.dumps(state)
+                    state = jsons.loads(state)
 
                 sim_state = SimulatorState(
                     sequence_id=self._sequence_id,
@@ -219,9 +276,40 @@ class SimulatorSession(abc.ABC):
                         "Setting flag to indicate that sim should attempt to unregister."
                     )
                     unregister = True
-                return keep_going
+
+                # because the advance call succeeded, reset the current-retry-counter, if it was set.
+                if self._current_retry_count > 0:
+                    self._current_retry_count = 0
+
+                return True
         except KeyboardInterrupt:
             unregister = True
+        except (
+            ServiceRequestError,
+            ServiceResponseError,
+            ServiceResponseTimeoutError,
+        ) as e:
+            log.exception("Tranisent Error: {}".format(e))
+            if self._current_retry_count < self._transient_error_retry_count:
+                sleep_time = (
+                    2 ** self._current_retry_count * 1
+                )  # sleep time in seconds.
+                self._current_retry_count += 1
+                log.info(
+                    "Ignoring transient exception, Retrying with backoff time: {}".format(
+                        sleep_time
+                    )
+                )
+                time.sleep(sleep_time)  # Back off
+            else:
+                log.info(
+                    "RetryLimit exceeded, Unregistering the session and continuing the event loop!"
+                )
+                self.unregister()
+                self._current_retry_count = 0
+
+            # we want to continue the training loop, on these transient error.
+            return True
         except Exception as err:
             unregister = True
             log.exception("Exiting due to the following error: {}".format(err))
@@ -257,16 +345,21 @@ class SimulatorSession(abc.ABC):
                 self.idle(0)
 
         elif event.type == EventType.unregister.value and event.unregister:
-            log.info("Unregister reason: {}.".format(event.unregister.reason))
-            return False
+            log.info("Unregister Event, Reason: {}".format(event.unregister.reason))
+
+            self._registered = None  # Invalidate the registered session record.
 
         return True
 
     def unregister(self):
-        """ Attempts to unregister simulator session"""
+        """Attempts to unregister simulator session"""
         if self._registered:
             try:
-                log.info("Attempting to unregister simulator.")
+                log.info(
+                    "Attempting to unregister simulator. {}".format(
+                        self._registered.session_id
+                    )
+                )
                 self._client.session.delete(
                     self._config.workspace,
                     session_id=self._registered.session_id,
@@ -279,15 +372,22 @@ class SimulatorSession(abc.ABC):
                 ):
                     self.unregistered(self._last_event.unregister.reason)
 
-                log.info("Successfully unregistered simulator.")
+                log.info(
+                    "Successfully unregistered simulator: {}".format(
+                        self._registered.session_id
+                    )
+                )
+
+                # Invalidate the previous registered session.
+                self._registered = None
             except Exception as err:
                 log.error("Unregister simulator failed with error: {}".format(err))
 
 
 def _handleSIGTERM(
-    signalType: int, frame: FrameType, sim_session: SimulatorSession
+    signalType: int, frame: Optional[FrameType], sim_session: SimulatorSession
 ) -> None:
-    """ Attempts to unregister sim when a SIGTERM signal is detected """
+    """Attempts to unregister sim when a SIGTERM signal is detected"""
     log.info("Handling SIGTERM.")
     sim_session.unregister()
     log.info("SIGTERM Handled, exiting.")

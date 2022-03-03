@@ -62,7 +62,7 @@ def test_flaky_sim(patched_sleep: Mock, flaky_sim: SimulatorSession, capsys: Any
 
 
 def test_500_err_sim(internal_server_err_sim: SimulatorSession):
-    """ Test that a 500 during get next event ends sim loop """
+    """Test that a 500 during get next event ends sim loop"""
     counter = 0
     try:
         while internal_server_err_sim.run():
@@ -77,7 +77,7 @@ def test_500_err_sim(internal_server_err_sim: SimulatorSession):
 def test_unregister_only_called_once(
     internal_server_err_sim: SimulatorSession, caplog: Any
 ):
-    """ Test to check that unregister is only called once during training """
+    """Test to check that unregister is only called once during training"""
     counter = 0
     try:
         while internal_server_err_sim.run():
@@ -91,22 +91,20 @@ def test_unregister_only_called_once(
 
 
 def test_handle_unregister_event(unregister_event_sim: SimulatorSession, caplog: Any):
-    """ Test to check that the unregister event is handled currently in the simulation loop """
+    """Test to check that the unregister event is handled currently in the simulation loop"""
     counter = 0
     logger = logging.getLogger("bonsai_common.simulator_session")
     logger.setLevel(logging.DEBUG)
-    try:
-        while unregister_event_sim.run():
-            if counter == 100:
-                # Avoid infinite simulation loops and fail
-                assert False
-            counter += 1
-    except HttpResponseError:
-        pass
-    assert (
-        "Setting flag to indicate that sim should attempt to unregister" in caplog.text
-    )
-    assert "Attempting to unregister simulator" in caplog.text
+    while unregister_event_sim.run():
+        if counter == 100:
+            # Avoid infinite simulation loops
+            break
+        counter += 1
+
+    # Even on Unregister Events, sim was re-registered and iterated the whole time.
+    # Every 25 iterations, sim gets an UnregisterEvent, and it should register again.
+    assert caplog.text.count("Registering Sim") == 4
+    assert counter == 100
 
 
 def test_training_unregister_on_sigterm(train_sim: SimulatorSession, caplog: Any):
