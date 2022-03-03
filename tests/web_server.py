@@ -5,7 +5,7 @@ Copyright 2020 Microsoft
 
 from aiohttp import web
 
-_MOCK_REGISTRATION_RESPONSE = {
+MOCK_REGISTRATION_RESPONSE = {
     "sessionId": "0123",
     "interface": {},
     "simulatorContext": {},
@@ -17,45 +17,50 @@ _MOCK_REGISTRATION_RESPONSE = {
     "sessionProgress": {},
 }
 
-_MOCK_IDLE_RESPONSE = {
+MOCK_IDLE_RESPONSE = {
     "type": "Idle",
     "sessionId": "0123",
     "sequenceId": "1",
     "idle": {},
 }
 
-_MOCK_UNREGISTER_RESPONSE = {
+MOCK_UNREGISTER_RESPONSE = {
     "type": "Unregister",
     "sessionId": "0123",
     "sequenceId": "1",
     "unregister": {"reason": "Finished", "details": "Some details"},
 }
 
-_MOCK_EPISODE_START_RESPONSE = {
+MOCK_EPISODE_START_RESPONSE = {
     "type": "EpisodeStart",
     "sessionId": "0123",
     "sequenceId": "1",
-    "episodeStart": {"config": {},},
+    "episodeStart": {
+        "config": {},
+    },
 }
 
-_MOCK_EPISODE_STEP_RESPONSE = {
+MOCK_EPISODE_STEP_RESPONSE = {
     "type": "EpisodeStep",
     "sessionId": "0123",
     "sequenceId": "1",
-    "episodeStep": {"action": {},},
+    "episodeStep": {
+        "action": {},
+    },
 }
 
-_MOCK_EPISODE_FINISH_RESPONSE = {
+MOCK_EPISODE_FINISH_RESPONSE = {
     "type": "EpisodeFinish",
     "sessionId": "0123",
     "sequenceId": "1",
-    "episodeFinish": {"reason": "Unspecified",},
+    "episodeFinish": {
+        "reason": "Unspecified",
+    },
 }
 
 
 def count_me(fnc):
-    """ decorator to count function calls in a class variable
-    """
+    """decorator to count function calls in a class variable"""
 
     def increment(self, *args, **kwargs):
         self._count += 1
@@ -72,6 +77,9 @@ def get_app():
     app.router.add_post(
         "/v2/workspaces/{workspace}/simulatorSessions/{session_id}/advance",
         stub.get_next_event,
+    )
+    app.router.add_delete(
+        "/v2/workspaces/{workspace}/simulatorSessions/{session_id}", stub.unregister
     )
     return app
 
@@ -114,7 +122,7 @@ class StargateStub:
             self._FLAKY = True
         if "unregisterevent" in request.match_info["workspace"]:
             self._UNREGISTER = True
-        return web.json_response(status=201, data=_MOCK_REGISTRATION_RESPONSE)
+        return web.json_response(status=201, data=MOCK_REGISTRATION_RESPONSE)
 
     @count_me
     async def get_next_event(self, request):
@@ -126,21 +134,21 @@ class StargateStub:
             return web.Response(status=503)
 
         if self._count == 1:
-            return web.json_response(_MOCK_EPISODE_START_RESPONSE)
+            return web.json_response(MOCK_EPISODE_START_RESPONSE)
 
         if self._count % 25 == 0:
             if self._UNREGISTER:
-                return web.json_response(_MOCK_UNREGISTER_RESPONSE)
+                return web.json_response(MOCK_UNREGISTER_RESPONSE)
             else:
-                return web.json_response(_MOCK_EPISODE_FINISH_RESPONSE)
+                return web.json_response(MOCK_EPISODE_FINISH_RESPONSE)
 
         if "500" in request.match_info["workspace"]:
             return web.json_response(status=500)
 
-        return web.json_response(_MOCK_EPISODE_STEP_RESPONSE)
+        return web.json_response(MOCK_EPISODE_STEP_RESPONSE)
 
     async def unregister(self, request):
-        return web.json_response(_MOCK_UNREGISTER_RESPONSE)
+        return web.json_response(status=204)
 
 
 if __name__ == "__main__":
