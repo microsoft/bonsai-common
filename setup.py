@@ -26,7 +26,7 @@ setup(
     install_requires=[
         "jsons<1.7",
         "microsoft-bonsai-api==0.1.4",
-        "numpy>=1.22,<1.24",
+        "numpy>=1.19,<1.24",
     ],
     python_requires=">=3.8",
     packages=find_packages(exclude=("tests",)),
