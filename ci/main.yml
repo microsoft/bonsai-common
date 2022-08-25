@@ -43,6 +43,7 @@ stages:
               python -m pip install --upgrade pip
               python -m pip install --upgrade setuptools
               python -m pip install --upgrade wheel
+              python -m pip install --upgrade build
               python -m pip install --upgrade twine
             displayName: "Install dependencies"
           - task: TwineAuthenticate@1
@@ -79,7 +80,7 @@ stages:
                 cat $PYPIRC_PATH
               displayName: "Change version"
           - bash: |
-              python setup.py bdist_wheel
+              python -m build
             displayName: "Generate Wheels"
           - bash: |
               # Cause the script to exit if a single command fails.
