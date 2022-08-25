@@ -1,5 +1,5 @@
 # Dockerfile for bonsai-common unit tests
-FROM python:3.6.9-slim
+FROM python:3.8-slim
 
 RUN pip3 install -U \
     setuptools \
@@ -8,10 +8,7 @@ RUN pip3 install -U \
     pytest-cov \
     coverage
 
-COPY microsoft_bonsai_api*.whl ./
-RUN pip3 install microsoft_bonsai_api*
-
-COPY bonsai-common/ bonsai-common
+COPY . bonsai-common
 RUN pip3 install -e bonsai-common/
 
 WORKDIR bonsai-common/
