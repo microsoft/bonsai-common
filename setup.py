@@ -28,6 +28,6 @@ setup(
         "microsoft-bonsai-api==0.1.4",
         "numpy>=1.19,<1.24",
     ],
-    python_requires=">=3.8",
+    python_requires=">=3.6",
     packages=find_packages(exclude=("tests",)),
 )
