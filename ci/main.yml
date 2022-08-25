@@ -1,7 +1,7 @@
 # Minimal Build pipeline
 # This allow us to generate wheels and upload that to a feed.
 # This pipeline will run on all pr/s and every time a change is landed into master.
-# If you wish to release a wheel without the buildId appended -> manually run the pipeline 
+# If you wish to release a wheel without the buildId appended -> manually run the pipeline
 # with the release parameter set to True
 
 parameters:
@@ -20,7 +20,7 @@ stages:
         strategy:
           matrix:
             linux_python36:
-              imageName: "ubuntu-16.04"
+              imageName: "ubuntu-latest"
               python.version: "3.6"
               WHEELS_PATH: "/dist/*.whl"
             # macos1015_python36:
@@ -43,6 +43,7 @@ stages:
               python -m pip install --upgrade pip
               python -m pip install --upgrade setuptools
               python -m pip install --upgrade wheel
+              python -m pip install --upgrade build
               python -m pip install --upgrade twine
             displayName: "Install dependencies"
           - task: TwineAuthenticate@1
@@ -79,7 +80,7 @@ stages:
                 cat $PYPIRC_PATH
               displayName: "Change version"
           - bash: |
-              python setup.py bdist_wheel
+              python -m build
             displayName: "Generate Wheels"
           - bash: |
               # Cause the script to exit if a single command fails.
