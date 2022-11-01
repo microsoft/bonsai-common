@@ -1,4 +1,9 @@
-# Bonsai Common
+# ** NOTICE **
+### This library is deprecated. Please use the [Bonsai Platform API](https://github.com/microsoft/microsoft-bonsai-api) instead.
+
+<br>
+
+## Bonsai Common
 ![Python Tests](https://github.com/microsoft/bonsai-common/workflows/Python%20Tests/badge.svg?branch=main)
 A python library for integrating data sources with Bonsai brain.
 
